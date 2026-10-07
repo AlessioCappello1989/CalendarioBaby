@@ -49,7 +49,7 @@ details summary{cursor:pointer;color:var(--acc);font-weight:700;padding:6px 0}
 <div class="tabs" id="tabs"></div>
 <div id="view"></div>
 <div id="dlg"></div>
-<p class="note">Dosi e intervalli vanno presi dal foglietto illustrativo o dal pediatra: l'app non li suggerisce, ti aiuta solo a tenerne traccia. Le notifiche arrivano solo con la pagina aperta; per sicurezza usa anche la sveglia del telefono.</p>
+<p class="note">Dosi e intervalli vanno presi dal foglietto illustrativo o dal pediatra: l'app non li suggerisce, ti aiuta solo a tenerne traccia. Le notifiche arrivano solo con la pagina aperta; per un promemoria preciso usa «Aggiungi al Calendario».</p>
 <script>
 var S={kids:[],meds:[],logs:[],vacc:[]},kid=null,tab='farmaci';
 try{var raw=localStorage.getItem('dsb');if(raw)S=JSON.parse(raw)}catch(e){}
@@ -94,6 +94,16 @@ function give(id){var m=S.meds.find(function(x){return x.id==id}),l=lastLog(id),
  if(m.max&&count24(id)>=m.max)msg.push('Hai già registrato '+count24(id)+' dosi nelle ultime 24 h (massimo '+m.max+').');
  var go=function(){S.logs.push({id:uid(),med:id,t:now,notified:false});save();askNotif();render()};
  if(msg.length)dlg('<b class="bad">ATTENZIONE: rischio sovradosaggio</b><p>'+msg.join('<br>')+'</p><p>Registrare comunque?</p>',go,'Registra comunque');else go()}
+function icsT(t){var d=new Date(t);function z(n){return(n<10?'0':'')+n}return d.getUTCFullYear()+z(d.getUTCMonth()+1)+z(d.getUTCDate())+'T'+z(d.getUTCHours())+z(d.getUTCMinutes())+z(d.getUTCSeconds())+'Z'}
+function icsE(x){return String(x).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n')}
+function ics(id){var m=S.meds.find(function(x){return x.id==id}),l=lastLog(id);if(!m)return;
+ if(!l){info('Registra prima una dose con «Dato adesso»: il promemoria si calcola dall\'ultima dose.');return}
+ var k=S.kids.find(function(x){return x.id==m.kid}),at=Math.max(l.t+m.hours*36e5,Date.now()+6e4),
+ title=(k?k.name+': ':'')+m.name+' - prossima dose',desc='Ultima dose alle '+hm(l.t)+(m.dose?'. Dose: '+m.dose:'')+'. Si può dare se serve; controlla foglietto o pediatra.',
+ txt=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Diario salute bimbi//IT','CALSCALE:GREGORIAN','BEGIN:VEVENT','UID:'+l.id+'-'+Math.round(at/1000)+'@diario-salute-bimbi','DTSTAMP:'+icsT(Date.now()),'DTSTART:'+icsT(at),'DTEND:'+icsT(at+9e5),'SUMMARY:'+icsE(title),'DESCRIPTION:'+icsE(desc),'BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+icsE(title),'TRIGGER:PT0M','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n')+'\r\n',
+ name='prossima-dose-'+m.name.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.ics';
+ try{var f=new File([txt],name,{type:'text/calendar'});if(navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f],title:title}).catch(function(){});return}}catch(e){}
+ try{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/calendar'}));a.download=name;document.body.appendChild(a);a.click();a.remove()}catch(e){info('Download non disponibile in questa pagina: apri l\'app installata.')}}
 function undo(id){var l=lastLog(id);if(l)dlg('Annullare l\'ultima dose registrata alle '+hm(l.t)+'?',function(){S.logs=S.logs.filter(function(x){return x.id!=l.id});save();render()},'Annulla dose')}
 
 function addVacc(){var n=$('vn').value.trim(),d=$('vd').value,x=$('vx').value;if(!n||!d){info('Inserisci nome vaccino e data.');return}
@@ -125,7 +135,7 @@ function vFarmaci(){var ms=S.meds.filter(function(m){return m.kid==kid}),h='';
    +'<div class="st '+cls+'" style="margin-top:6px">'+st+'</div>'
    +(l?'<div class="mut">Ultima dose: '+fmt(l.t)+' · dosi nelle ultime 24 h: '+c+'</div>':'')
    +'<button class="btn" onclick="give(\''+m.id+'\')">Dato adesso</button>'
-   +(l?'<button class="btn ghost" onclick="undo(\''+m.id+'\')">Annulla ultima dose</button>':'')+'</div>'});
+   +(l?'<button class="btn ghost" onclick="undo(\''+m.id+'\')">Annulla ultima dose</button>':'')+'</div><button class="btn ghost" style="margin:0 0 10px" onclick="ics(\''+m.id+'\')">Aggiungi al Calendario</button>'});
  if(!ms.length)h+='<p class="mut">Nessun farmaco. Aggiungine uno qui sotto, ad esempio Tachipirina o un antibiotico.</p>';
  h+='<details'+(ms.length?'':' open')+'><summary>Aggiungi farmaco</summary><div class="card"><label>Nome</label><input id="mn" placeholder="Es. Tachipirina">'
   +'<label>Dose (come da foglietto o pediatra)</label><input id="md" placeholder="Es. 5 ml">'

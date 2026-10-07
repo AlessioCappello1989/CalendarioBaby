@@ -1,5 +1,5 @@
-var C='dsb-v4',F=['./','index.html','manifest.json','icon-192.png','icon-512.png'];
+var C='dsb-v7',F=['./','index.html','manifest.json','icon-192.png','icon-512.png'];
 self.addEventListener('install',function(e){e.waitUntil(caches.open(C).then(function(c){return c.addAll(F)}));self.skipWaiting()});
-self.addEventListener('activate',function(e){e.waitUntil(clients.claim())});
+self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(k){return Promise.all(k.filter(function(x){return x!==C}).map(function(x){return caches.delete(x)}))}).then(function(){return clients.claim()}))});
 self.addEventListener('fetch',function(e){e.respondWith(fetch(e.request).catch(function(){return caches.match(e.request)}))});
 self.addEventListener('notificationclick',function(e){e.notification.close();e.waitUntil(clients.openWindow('./index.html'))});
