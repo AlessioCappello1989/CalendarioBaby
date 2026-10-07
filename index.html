@@ -39,6 +39,7 @@ label{font-size:.85rem;color:var(--mut)}
 details summary{cursor:pointer;color:var(--acc);font-weight:700;padding:6px 0}
 :focus-visible{outline:3px solid var(--acc);outline-offset:2px}
 .mb{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:9}.mc{background:var(--card);border-radius:14px;padding:16px;width:100%;max-width:380px}
+.mc b{display:block;margin-bottom:6px}.mc label{display:block}
 </style>
 </head>
 <body>
@@ -98,7 +99,7 @@ function undo(id){var l=lastLog(id);if(l)dlg('Annullare l\'ultima dose registrat
 function addVacc(){var n=$('vn').value.trim(),d=$('vd').value,x=$('vx').value;if(!n||!d){info('Inserisci nome vaccino e data.');return}
  S.vacc.push({id:uid(),kid:kid,name:n,date:d,next:x});save();render()}
 function editVacc(id){var v=S.vacc.find(function(x){return x.id==id});if(!v)return;
- dlg('<b>Modifica vaccino</b><label>Vaccino</label><input id="en" value="'+esc(v.name)+'"><label>Data e ora somministrazione</label><input id="ed" type="datetime-local" value="'+(v.date.length>10?v.date:v.date+'T09:00')+'"><label>Data richiamo (facoltativa)</label><input id="ex" type="date" value="'+(v.next||'')+'">',
+ dlg('<b>Modifica vaccino</b><label>Vaccino</label><input id="en" value="'+esc(v.name)+'"><label>Data e ora somministrazione</label><input id="ed" type="datetime-local" value="'+(v.date.length>10?v.date:v.date+'T09:00')+'"><label>Data richiamo (facoltativa)</label><input id="ex" type="date" value="'+(v.next||'')+'"><button class="btn ghost" onclick="$(\'ex\').value=\'\'">Cancella data richiamo</button>',
  function(){var n=$('en').value.trim(),d=$('ed').value;if(!n||!d)return false;v.name=n;v.date=d;v.next=$('ex').value;save();render()},'Salva modifiche')}
 function delVacc(id){dlg('Eliminare questo vaccino?',function(){S.vacc=S.vacc.filter(function(v){return v.id!=id});save();render()},'Elimina')}
 
@@ -139,7 +140,7 @@ function vVacc(){var vs=S.vacc.filter(function(v){return v.kid==kid}).sort(funct
  if(!vs.length)h+='<p class="mut">Nessun vaccino registrato.</p>';
  h+='<details'+(vs.length?'':' open')+'><summary>Aggiungi vaccino</summary><div class="card"><label>Vaccino</label><input id="vn" placeholder="Es. Esavalente 2ª dose">'
   +'<label>Data e ora somministrazione</label><input id="vd" type="datetime-local" value="'+nowLocal()+'">'
-  +'<label>Data richiamo (facoltativa)</label><input id="vx" type="date"><button class="btn" onclick="addVacc()">Salva vaccino</button></div></details>';return h}
+  +'<label>Data richiamo (facoltativa)</label><input id="vx" type="date"><button class="btn ghost" onclick="$(\'vx\').value=\'\'">Cancella data richiamo</button><button class="btn" onclick="addVacc()">Salva vaccino</button></div></details>';return h}
 
 function vCal(){var ev=[],mids={};S.meds.filter(function(m){return m.kid==kid}).forEach(function(m){mids[m.id]=m});
  S.logs.forEach(function(l){var m=mids[l.med];if(m)ev.push({t:l.t,txt:hm(l.t)+' · Dose data: '+esc(m.name)+(m.dose?' ('+esc(m.dose)+')':'')})});
