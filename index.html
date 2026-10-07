@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f766e">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Diario salute bimbi</title>
+<style>
+:root{--bg:#f3f8f7;--card:#fff;--ink:#16302d;--mut:#5d7773;--acc:#0f766e;--accink:#fff;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--line:#d5e5e2;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1b19;--card:#162826;--ink:#e4f1ef;--mut:#92b0ab;--acc:#2dd4bf;--accink:#06231f;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--line:#274642}}
+:root[data-theme="dark"]{--bg:#0e1b19;--card:#162826;--ink:#e4f1ef;--mut:#92b0ab;--acc:#2dd4bf;--accink:#06231f;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--line:#274642}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 "Trebuchet MS","Segoe UI",system-ui,sans-serif;max-width:560px;margin:auto;padding:14px 14px 90px}
+h1{font-size:1.35rem;margin:4px 0 10px}
+h2{font-size:1.05rem;margin:18px 0 8px}
+.kids,.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+button,input,select{font:inherit;color:inherit}
+.chip,.tab{border:1.5px solid var(--line);background:var(--card);border-radius:20px;padding:7px 14px;white-space:nowrap;cursor:pointer}
+.chip.on,.tab.on{background:var(--acc);color:var(--accink);border-color:var(--acc);font-weight:700}
+.tabs{margin:10px 0}
+.al{background:var(--warn);color:#fff;border-radius:14px;padding:12px;margin:6px 0 10px}.al b{display:block;font-size:1.05rem}.al .g2{margin-top:8px}.al button{background:#fff;color:#7c2d12;border:0;border-radius:10px;padding:9px;font-weight:700}
+.tab{border-radius:10px;flex:1;text-align:center}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mut{color:var(--mut);font-size:.88rem}
+.btn{background:var(--acc);color:var(--accink);border:0;border-radius:10px;padding:11px 14px;font-weight:700;cursor:pointer;width:100%;margin-top:8px}
+.btn.sm{width:auto;padding:6px 10px;margin:0;font-size:.85rem}
+.btn.ghost{background:transparent;color:var(--mut);border:1px solid var(--line);font-weight:400}
+input,select{width:100%;padding:10px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);margin:4px 0}
+label{font-size:.85rem;color:var(--mut)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.st{font-weight:700}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.note{font-size:.8rem;color:var(--mut);border-left:3px solid var(--warn);padding-left:8px;margin:12px 0}
+.day{font-weight:700;margin:14px 0 4px}
+details summary{cursor:pointer;color:var(--acc);font-weight:700;padding:6px 0}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.mb{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:9}.mc{background:var(--card);border-radius:14px;padding:16px;width:100%;max-width:380px}
+</style>
+</head>
+<body>
+<h1>Diario salute bimbi</h1>
+<div id="alerts"></div>
+<div class="kids" id="kids"></div>
+<div class="tabs" id="tabs"></div>
+<div id="view"></div>
+<div id="dlg"></div>
+<p class="note">Dosi e intervalli vanno presi dal foglietto illustrativo o dal pediatra: l'app non li suggerisce, ti aiuta solo a tenerne traccia. Le notifiche arrivano solo con la pagina aperta; per sicurezza usa anche la sveglia del telefono.</p>
+<script>
+var S={kids:[],meds:[],logs:[],vacc:[]},kid=null,tab='farmaci';
+try{var raw=localStorage.getItem('dsb');if(raw)S=JSON.parse(raw)}catch(e){}
+if(S.kids.length)kid=S.kids[0].id;
+function save(){try{localStorage.setItem('dsb',JSON.stringify(S))}catch(e){}}
+function $(i){return document.getElementById(i)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5)}
+function fmt(t){return new Date(t).toLocaleString('it-IT',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+function hm(t){return new Date(t).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}
+function dur(ms){var m=Math.ceil(ms/60000),h=Math.floor(m/60);return h?h+' h '+(m%60)+' min':m+' min'}
+function dayKey(t){return new Date(t).toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+function closeDlg(){$('dlg').innerHTML=''}
+function dlg(html,ok,label,noCancel){$('dlg').innerHTML='<div class="mb"><div class="mc"><div>'+html+'</div><div class="g2">'+(noCancel?'':'<button class="btn ghost" id="dn">Annulla</button>')+'<button class="btn" id="dy">'+(label||'Conferma')+'</button></div></div></div>';
+ if(!noCancel)$('dn').onclick=closeDlg;$('dy').onclick=function(){var x=ok?ok():0;if(x!==false)closeDlg()}}
+function info(m){dlg(esc(m),null,'OK',1)}
+function nowLocal(){var d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)}
+
+function addKid(){dlg('<b>Nuovo bambino</b><input id="kn" placeholder="Nome" autocomplete="off">',function(){var n=$('kn').value.trim();if(!n)return false;var k={id:uid(),name:n};S.kids.push(k);kid=k.id;save();render()},'Aggiungi')}
+function delKid(){var k=S.kids.find(function(x){return x.id==kid});if(!k)return;dlg('Eliminare '+esc(k.name)+' e tutti i suoi dati?',doDelKid,'Elimina')}
+function doDelKid(){
+ var mids=S.meds.filter(function(m){return m.kid==kid}).map(function(m){return m.id});
+ S.logs=S.logs.filter(function(l){return mids.indexOf(l.med)<0});S.meds=S.meds.filter(function(m){return m.kid!=kid});
+ S.vacc=S.vacc.filter(function(v){return v.kid!=kid});S.kids=S.kids.filter(function(x){return x.id!=kid});kid=S.kids.length?S.kids[0].id:null;save();render()}
+
+function addMed(){var n=$('mn').value.trim(),h=parseFloat($('mh').value),mx=parseInt($('mm').value);
+ if(!n||!(h>0)){info('Inserisci nome del farmaco e ore minime tra le dosi.');return}
+ S.meds.push({id:uid(),kid:kid,name:n,dose:$('md').value.trim(),hours:h,max:mx>0?mx:0,created:Date.now()});save();render()}
+function editMed(id){var m=S.meds.find(function(x){return x.id==id});if(!m)return;
+ dlg('<b>Modifica farmaco</b><label>Nome</label><input id="en" value="'+esc(m.name)+'"><label>Dose</label><input id="ed" value="'+esc(m.dose||'')+'"><div class="g2"><div><label>Ore minime tra dosi</label><input id="eh" type="number" step="0.5" min="0.5" inputmode="decimal" value="'+m.hours+'"></div><div><label>Max dosi in 24 h</label><input id="em" type="number" min="1" inputmode="numeric" value="'+(m.max||'')+'"></div></div>',
+ function(){var n=$('en').value.trim(),h=parseFloat($('eh').value),mx=parseInt($('em').value);if(!n||!(h>0))return false;m.name=n;m.dose=$('ed').value.trim();m.hours=h;m.max=mx>0?mx:0;save();render()},'Salva modifiche')}
+function delMed(id){dlg('Eliminare questo farmaco e il suo storico?',function(){S.meds=S.meds.filter(function(m){return m.id!=id});S.logs=S.logs.filter(function(l){return l.med!=id});save();render()},'Elimina')}
+function lastLog(id){var a=S.logs.filter(function(l){return l.med==id}).sort(function(a,b){return b.t-a.t});return a[0]}
+function count24(id){var c=Date.now()-864e5;return S.logs.filter(function(l){return l.med==id&&l.t>c}).length}
+function give(id){var m=S.meds.find(function(x){return x.id==id}),l=lastLog(id),now=Date.now(),msg=[];
+ if(l&&now<l.t+m.hours*36e5)msg.push('Sono passate solo '+dur(now-l.t)+' dall\'ultima dose (minimo '+m.hours+' h).');
+ if(m.max&&count24(id)>=m.max)msg.push('Hai già registrato '+count24(id)+' dosi nelle ultime 24 h (massimo '+m.max+').');
+ var go=function(){S.logs.push({id:uid(),med:id,t:now,notified:false});save();askNotif();render()};
+ if(msg.length)dlg('<b class="bad">ATTENZIONE: rischio sovradosaggio</b><p>'+msg.join('<br>')+'</p><p>Registrare comunque?</p>',go,'Registra comunque');else go()}
+function undo(id){var l=lastLog(id);if(l)dlg('Annullare l\'ultima dose registrata alle '+hm(l.t)+'?',function(){S.logs=S.logs.filter(function(x){return x.id!=l.id});save();render()},'Annulla dose')}
+
+function addVacc(){var n=$('vn').value.trim(),d=$('vd').value,x=$('vx').value;if(!n||!d){info('Inserisci nome vaccino e data.');return}
+ S.vacc.push({id:uid(),kid:kid,name:n,date:d,next:x});save();render()}
+function editVacc(id){var v=S.vacc.find(function(x){return x.id==id});if(!v)return;
+ dlg('<b>Modifica vaccino</b><label>Vaccino</label><input id="en" value="'+esc(v.name)+'"><label>Data e ora somministrazione</label><input id="ed" type="datetime-local" value="'+(v.date.length>10?v.date:v.date+'T09:00')+'"><label>Data richiamo (facoltativa)</label><input id="ex" type="date" value="'+(v.next||'')+'">',
+ function(){var n=$('en').value.trim(),d=$('ed').value;if(!n||!d)return false;v.name=n;v.date=d;v.next=$('ex').value;save();render()},'Salva modifiche')}
+function delVacc(id){dlg('Eliminare questo vaccino?',function(){S.vacc=S.vacc.filter(function(v){return v.id!=id});save();render()},'Elimina')}
+
+function askNotif(){try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}}
+var beeped={};
+function beep(){try{var C=window.AudioContext||window.webkitAudioContext,c=new C(),i;for(i=0;i<3;i++){var o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.2;o.start(c.currentTime+i*.4);o.stop(c.currentTime+i*.4+.25)}}catch(e){}try{navigator.vibrate&&navigator.vibrate([300,150,300,150,300])}catch(e){}}
+function dueList(){var now=Date.now(),out=[];S.meds.forEach(function(m){var l=lastLog(m.id);if(l&&!l.ack&&now>=l.t+m.hours*36e5){var k=S.kids.find(function(x){return x.id==m.kid});out.push({m:m,l:l,k:k})}});return out}
+function ack(id){S.logs.forEach(function(l){if(l.id==id)l.ack=true});save();render()}
+function notify(t,b){try{navigator.serviceWorker.ready.then(function(r){r.showNotification(t,{body:b,icon:'icon-192.png',vibrate:[300,150,300],tag:t})})}catch(e){try{new Notification(t,{body:b})}catch(x){}}}
+function checkNotif(){var fresh=false;dueList().forEach(function(d){if(!beeped[d.l.id]){beeped[d.l.id]=1;fresh=true;
+ try{if('Notification' in window&&Notification.permission==='granted')notify(d.m.name+' per '+(d.k?d.k.name:''),'Si può dare la prossima dose (se serve)')}catch(e){}}});
+ if(fresh){beep();render()}}
+setInterval(function(){checkNotif();if(!$('dlg').innerHTML&&!document.activeElement.matches('input,select'))render()},15000);
+
+function vFarmaci(){var ms=S.meds.filter(function(m){return m.kid==kid}),h='';
+ ms.forEach(function(m){var l=lastLog(m.id),now=Date.now(),c=count24(m.id),st,cls;
+  if(!l){st='Nessuna dose registrata';cls='mut'}
+  else if(m.max&&c>=m.max){st='Limite giornaliero raggiunto ('+c+'/'+m.max+')';cls='bad'}
+  else if(now<l.t+m.hours*36e5){st='Attendere fino alle '+hm(l.t+m.hours*36e5)+' (tra '+dur(l.t+m.hours*36e5-now)+')';cls='warn'}
+  else{st='Può essere somministrato di nuovo';cls='ok'}
+  h+='<div class="card"><div class="row"><b>'+esc(m.name)+'</b><span><button class="btn ghost sm" onclick="editMed(\''+m.id+'\')">Modifica</button> <button class="btn ghost sm" onclick="delMed(\''+m.id+'\')" aria-label="Elimina farmaco">Elimina</button></span></div>'
+   +'<div class="mut">'+(m.dose?'Dose: '+esc(m.dose)+' · ':'')+'ogni '+m.hours+' h almeno'+(m.max?' · max '+m.max+'/24 h':'')+'</div>'
+   +'<div class="st '+cls+'" style="margin-top:6px">'+st+'</div>'
+   +(l?'<div class="mut">Ultima dose: '+fmt(l.t)+' · dosi nelle ultime 24 h: '+c+'</div>':'')
+   +'<button class="btn" onclick="give(\''+m.id+'\')">Dato adesso</button>'
+   +(l?'<button class="btn ghost" onclick="undo(\''+m.id+'\')">Annulla ultima dose</button>':'')+'</div>'});
+ if(!ms.length)h+='<p class="mut">Nessun farmaco. Aggiungine uno qui sotto, ad esempio Tachipirina o un antibiotico.</p>';
+ h+='<details'+(ms.length?'':' open')+'><summary>Aggiungi farmaco</summary><div class="card"><label>Nome</label><input id="mn" placeholder="Es. Tachipirina">'
+  +'<label>Dose (come da foglietto o pediatra)</label><input id="md" placeholder="Es. 5 ml">'
+  +'<div class="g2"><div><label>Ore minime tra dosi</label><input id="mh" type="number" step="0.5" min="0.5" inputmode="decimal"></div>'
+  +'<div><label>Max dosi in 24 h</label><input id="mm" type="number" min="1" inputmode="numeric"></div></div>'
+  +'<button class="btn" onclick="addMed()">Salva farmaco</button></div></details>';return h}
+
+function vVacc(){var vs=S.vacc.filter(function(v){return v.kid==kid}).sort(function(a,b){return b.date<a.date?-1:1}),h='';
+ vs.forEach(function(v){h+='<div class="card"><div class="row"><b>'+esc(v.name)+'</b><span><button class="btn ghost sm" onclick="editVacc(\''+v.id+'\')">Modifica</button> <button class="btn ghost sm" onclick="delVacc(\''+v.id+'\')">Elimina</button></span></div>'
+  +'<div class="mut">Fatto il '+(v.date.length>10?new Date(v.date).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):new Date(v.date).toLocaleDateString('it-IT'))+'</div>'
+  +(v.next?'<div class="st '+(v.next<nowLocal().slice(0,10)?'bad':'warn')+'">Prossima dose: '+new Date(v.next).toLocaleDateString('it-IT')+'</div>':'')+'</div>'});
+ if(!vs.length)h+='<p class="mut">Nessun vaccino registrato.</p>';
+ h+='<details'+(vs.length?'':' open')+'><summary>Aggiungi vaccino</summary><div class="card"><label>Vaccino</label><input id="vn" placeholder="Es. Esavalente 2ª dose">'
+  +'<label>Data e ora somministrazione</label><input id="vd" type="datetime-local" value="'+nowLocal()+'">'
+  +'<label>Data richiamo (facoltativa)</label><input id="vx" type="date"><button class="btn" onclick="addVacc()">Salva vaccino</button></div></details>';return h}
+
+function vCal(){var ev=[],mids={};S.meds.filter(function(m){return m.kid==kid}).forEach(function(m){mids[m.id]=m});
+ S.logs.forEach(function(l){var m=mids[l.med];if(m)ev.push({t:l.t,txt:hm(l.t)+' · Dose data: '+esc(m.name)+(m.dose?' ('+esc(m.dose)+')':'')})});
+ S.vacc.filter(function(v){return v.kid==kid}).forEach(function(v){
+  var has=v.date.length>10;ev.push({t:new Date(has?v.date:v.date+'T09:00').getTime(),txt:(has?hm(new Date(v.date).getTime())+' · ':'')+'Vaccino: '+esc(v.name)});
+  if(v.next)ev.push({t:new Date(v.next+'T09:00').getTime(),txt:'Richiamo: '+esc(v.name),future:1})});
+ S.meds.filter(function(m){return m.kid==kid&&m.created}).forEach(function(m){ev.push({t:m.created,txt:hm(m.created)+' · Farmaco aggiunto: '+esc(m.name)+(m.dose?' ('+esc(m.dose)+')':'')+', ogni '+m.hours+' h'})});
+ ev.sort(function(a,b){return b.t-a.t});var h='',last='';
+ var ml=S.meds.filter(function(m){return m.kid==kid});
+ if(ml.length){h+='<h2>Farmaci</h2>';ml.forEach(function(m){var n=S.logs.filter(function(l){return l.med==m.id}).length,l=lastLog(m.id);
+  h+='<div class="card" style="margin:4px 0;padding:8px 12px"><b>'+esc(m.name)+'</b><div class="mut">'+(m.dose?'Dose: '+esc(m.dose)+' · ':'')+'ogni '+m.hours+' h'+(m.max?' · max '+m.max+'/24 h':'')+'<br>Dosi registrate: '+n+(l?' · ultima: '+fmt(l.t):'')+'</div></div>'})}
+ var vl=S.vacc.filter(function(v){return v.kid==kid});
+ if(vl.length){h+='<h2>Vaccini</h2>';vl.slice().sort(function(a,b){return b.date<a.date?-1:1}).forEach(function(v){
+  h+='<div class="card" style="margin:4px 0;padding:8px 12px"><b>'+esc(v.name)+'</b><div class="mut">Fatto: '+(v.date.length>10?fmt(new Date(v.date).getTime()):new Date(v.date).toLocaleDateString('it-IT'))+(v.next?'<br>Richiamo: '+new Date(v.next).toLocaleDateString('it-IT'):'')+'</div></div>'})}
+ if(ev.length)h+='<h2>Cronologia</h2>';
+ ev.forEach(function(e){var d=dayKey(e.t);if(d!=last){h+='<div class="day">'+d+'</div>';last=d}h+='<div class="card" style="margin:4px 0;padding:8px 12px">'+e.txt+(e.future?' <span class="warn">(in programma)</span>':'')+'</div>'});
+ return h||'<p class="mut">Lo storico di dosi e vaccini comparirà qui.</p>'}
+
+function renderAlerts(){var h='';dueList().forEach(function(d){h+='<div class="al" role="alert"><b>'+esc(d.m.name)+' per '+esc(d.k?d.k.name:'')+'</b>Sono passate '+d.m.hours+' h dall\'ultima dose ('+hm(d.l.t)+'). Si può dare la prossima dose'+(d.m.dose?' ('+esc(d.m.dose)+')':'')+', se serve.<div class="g2"><button onclick="give(\''+d.m.id+'\')">Dato adesso</button><button onclick="ack(\''+d.l.id+'\')">Ok, non serve</button></div></div>'});$('alerts').innerHTML=h}
+function render(){renderAlerts();var kh='';S.kids.forEach(function(k){kh+='<button class="chip'+(k.id==kid?' on':'')+'" onclick="kid=\''+k.id+'\';render()">'+esc(k.name)+'</button>'});
+ $('kids').innerHTML=kh+'<button class="chip" onclick="addKid()">+ Bambino</button>';
+ if(!kid){$('tabs').innerHTML='';$('view').innerHTML='<p>Inizia aggiungendo un bambino con il pulsante «+ Bambino».</p>';return}
+ var T={farmaci:'Farmaci',vaccini:'Vaccini',calendario:'Calendario'},th='';
+ for(var k in T)th+='<button class="tab'+(k==tab?' on':'')+'" onclick="tab=\''+k+'\';render()">'+T[k]+'</button>';
+ $('tabs').innerHTML=th;
+ $('view').innerHTML=(tab=='farmaci'?vFarmaci():tab=='vaccini'?vVacc():vCal())+'<button class="btn ghost" onclick="delKid()" style="margin-top:24px">Elimina questo bambino</button>'}
+render();checkNotif();
+try{if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js')}catch(e){}
+</script>
+</body>
+</html>
