@@ -56,8 +56,9 @@ details summary{cursor:pointer;color:var(--acc);font-weight:700;padding:6px 0}
 var S={kids:[],meds:[],logs:[],vacc:[]},kid=null,tab='farmaci';
 var storeOK=true;
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
-var SB_URL='https://viobmufmmwyevoboglts.supabase.co',SB_KEY='sb_publishable_US5vhaFMEQeK1ZGiXVS4gQ_I6M8H7eL',TBL='diario_salute',sb=null,remote={},syncing=false,again=false,loaded=false;
-try{sb=window.supabase.createClient(SB_URL,SB_KEY)}catch(e){console.error(e)}
+var SB_URL='https://viobmufmmwyevoboglts.supabase.co',SB_KEY='sb_publishable_US5vhaFMEQeK1ZGiXVS4gQ_I6M8H7eL',TBL='diario_salute',sb=null,remote={},syncing=false,again=false,loaded=false,lastErr='';
+function errTxt(e){return e?((e.message||String(e))+(e.code?' ['+e.code+']':'')+(e.hint?' - '+e.hint:'')):''}
+try{sb=window.supabase.createClient(SB_URL,SB_KEY)}catch(e){lastErr='SDK Supabase non caricato (controlla la connessione o il blocco annunci)';console.error(e)}
 function flat(){var o={};function add(t,x){o[t+'_'+x.id]={id:t+'_'+x.id,tipo:t,dati:x}}
  S.kids.forEach(function(x){add('bambino',x)});S.meds.forEach(function(x){add('farmaco',x)});S.logs.forEach(function(x){add('dose',x)});S.vacc.forEach(function(x){add('vaccino',x)});return o}
 function fromRows(rows){var n={kids:[],meds:[],logs:[],vacc:[]},map={bambino:'kids',farmaco:'meds',dose:'logs',vaccino:'vacc'};
@@ -69,8 +70,8 @@ async function load(){if(!sb){storeOK=false;render();return}
   var pend=null;try{pend=JSON.parse(localStorage.getItem('dsb_pending'))}catch(e){}
   if(pend&&pend.kids){S=pend}
   else if(!res.data.length){try{var old=JSON.parse(localStorage.getItem('dsb'));if(old&&old.kids&&old.kids.length)S=old}catch(e){}}
-  loaded=true;storeOK=true;if(!S.kids.find(function(k){return k.id==kid}))kid=S.kids.length?S.kids[0].id:null}
- catch(e){storeOK=false;console.error(e)}
+  loaded=true;storeOK=true;lastErr='';if(!S.kids.find(function(k){return k.id==kid}))kid=S.kids.length?S.kids[0].id:null}
+ catch(e){storeOK=false;lastErr=errTxt(e);console.error(e)}
  render();if(loaded){checkNotif();syncNow()}}
 function save(){try{localStorage.setItem('dsb_pending',JSON.stringify(S))}catch(e){}syncNow()}
 async function syncNow(){if(!sb||!loaded)return;if(syncing){again=true;return}syncing=true;
@@ -79,8 +80,8 @@ async function syncNow(){if(!sb||!loaded)return;if(syncing){again=true;return}sy
   for(id in remote){if(!cur[id])del.push(id)}
   if(up.length){var e1=(await sb.from(TBL).upsert(up.map(function(u){return u.r}),{onConflict:'id'})).error;if(e1)throw e1;up.forEach(function(u){remote[u.r.id]=u.js})}
   if(del.length){var e2=(await sb.from(TBL).delete().in('id',del)).error;if(e2)throw e2;del.forEach(function(i){delete remote[i]})}
-  storeOK=true;if(!again){try{localStorage.removeItem('dsb_pending')}catch(e){}}}
- catch(e){storeOK=false;console.error(e)}
+  storeOK=true;lastErr='';if(!again){try{localStorage.removeItem('dsb_pending')}catch(e){}}}
+ catch(e){storeOK=false;lastErr=errTxt(e);console.error(e)}
  syncing=false;renderAlerts();if(again){again=false;syncNow()}}
 setInterval(function(){if(!loaded)load();else if(!storeOK&&!syncing)syncNow()},20000);
 window.addEventListener('online',function(){if(!loaded)load();else syncNow()});
@@ -197,9 +198,9 @@ function vCal(){var ev=[],mids={};S.meds.filter(function(m){return m.kid==kid}).
  var td=ev.filter(function(e){return e.todo}).sort(function(a,b){return a.t-b.t}),dn=ev.filter(function(e){return !e.todo}).sort(function(a,b){return b.t-a.t});
  function grp(list){var h='',last='';list.forEach(function(e){var d=dayKey(e.t);if(d!=last){h+='<div class="day">'+d+'</div>';last=d}h+='<div class="card" style="margin:4px 0;padding:8px 12px">'+e.txt+'</div>'});return h}
  return '<h2 class="sec">Da fare</h2>'+(td.length?grp(td):'<p class="mut">Nessun vaccino da fare.</p>')+'<h2 class="sec">Fatti</h2>'+(dn.length?grp(dn):'<p class="mut">Ancora nulla di registrato.</p>')}
-function renderAlerts(){var h=storeOK?'':'<div class="al" role="alert"><b>Sincronizzazione non riuscita</b>Controlla la connessione: riprovo in automatico. Le modifiche restano salvate sul telefono nel frattempo.</div>';dueList().forEach(function(d){h+='<div class="al" role="alert"><b>'+esc(d.m.name)+' per '+esc(d.k?d.k.name:'')+'</b>Sono passate '+d.m.hours+' h dall\'ultima dose ('+hm(d.l.t)+'). Si può dare la prossima dose'+(d.m.dose?' ('+esc(d.m.dose)+')':'')+', se serve.<div class="g2"><button onclick="give(\''+d.m.id+'\')">Dato adesso</button><button onclick="ack(\''+d.l.id+'\')">Ok, non serve</button></div></div>'});$('alerts').innerHTML=h}
+function renderAlerts(){var h=storeOK?'':'<div class="al" role="alert"><b>Sincronizzazione non riuscita</b>Controlla la connessione: riprovo in automatico. Le modifiche restano salvate sul telefono nel frattempo.'+(lastErr?'<br><small>Dettaglio: '+esc(lastErr)+'</small>':'')+'</div>';dueList().forEach(function(d){h+='<div class="al" role="alert"><b>'+esc(d.m.name)+' per '+esc(d.k?d.k.name:'')+'</b>Sono passate '+d.m.hours+' h dall\'ultima dose ('+hm(d.l.t)+'). Si può dare la prossima dose'+(d.m.dose?' ('+esc(d.m.dose)+')':'')+', se serve.<div class="g2"><button onclick="give(\''+d.m.id+'\')">Dato adesso</button><button onclick="ack(\''+d.l.id+'\')">Ok, non serve</button></div></div>'});$('alerts').innerHTML=h}
 function render(){renderAlerts();
- if(!loaded){$('kids').innerHTML='';$('tabs').innerHTML='';$('view').innerHTML='<p class="mut">'+(storeOK?'Caricamento…':'Impossibile caricare i dati dal database. Riprovo in automatico.')+'</p><button class="btn ghost" onclick="load()">Riprova ora</button>';return}var kh='';S.kids.forEach(function(k){kh+='<button class="chip'+(k.id==kid?' on':'')+'" onclick="kid=\''+k.id+'\';render()">'+esc(k.name)+'</button>'});
+ if(!loaded){$('kids').innerHTML='';$('tabs').innerHTML='';$('view').innerHTML='<p class="mut">'+(storeOK?'Caricamento…':'Impossibile caricare i dati dal database. Riprovo in automatico.')+(lastErr&&!storeOK?'<br><small>Dettaglio: '+esc(lastErr)+'</small>':'')+'</p><button class="btn ghost" onclick="load()">Riprova ora</button>';return}var kh='';S.kids.forEach(function(k){kh+='<button class="chip'+(k.id==kid?' on':'')+'" onclick="kid=\''+k.id+'\';render()">'+esc(k.name)+'</button>'});
  $('kids').innerHTML=kh+'<button class="chip" onclick="addKid()">+ Bambino</button>';
  if(!kid){$('tabs').innerHTML='';$('view').innerHTML='<p>Inizia aggiungendo un bambino con il pulsante «+ Bambino», oppure ripristina un backup.</p><button class="btn ghost" onclick="backup()">Backup dati</button>';return}
  var T={farmaci:'Farmaci',vaccini:'Vaccini',calendario:'Calendario'},th='';
