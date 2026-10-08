@@ -41,6 +41,8 @@ details summary{cursor:pointer;color:var(--acc);font-weight:700;padding:6px 0}
 .mb{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:9}.mc{background:var(--card);border-radius:14px;padding:16px;width:100%;max-width:380px}
 .mc b{display:block;margin-bottom:6px}.mc label{display:block}
 .sec{color:var(--acc);font-size:1.15rem;border-bottom:3px solid var(--blk);padding-bottom:4px;margin:22px 0 8px}
+.tip{border-left-color:var(--acc)}.tip b{color:var(--ink)}
+.tab{padding:7px 2px;font-size:.92rem}
 </style>
 </head>
 <body>
@@ -51,6 +53,7 @@ details summary{cursor:pointer;color:var(--acc);font-weight:700;padding:6px 0}
 <div id="view"></div>
 <div id="dlg"></div>
 <p class="note">Dosi e intervalli vanno presi dal foglietto illustrativo o dal pediatra: l'app non li suggerisce, ti aiuta solo a tenerne traccia. Le notifiche arrivano solo con la pagina aperta; per un promemoria preciso usa «Aggiungi al Calendario».</p>
+<div class="note tip"><b>Come non perdere i dati</b><br>I dati sono salvati solo su questo telefono, nel browser. Quando cancelli i dati di navigazione (Chrome: Impostazioni, Privacy e sicurezza, Elimina dati di navigazione), <b>togli la spunta da «Cookie e dati dei siti»</b>: se la lasci attiva, il browser cancella tutti i dati e i farmaci salvati nell'app.<br>Per sicurezza, salva ogni tanto un backup: premi «Backup dati», copia il testo e incollalo in un blocco note.</div>
 <script>
 var S={kids:[],meds:[],logs:[],vacc:[]},kid=null,tab='farmaci';
 try{var raw=localStorage.getItem('dsb');if(raw)S=JSON.parse(raw)}catch(e){}
@@ -74,7 +77,29 @@ function dlg(html,ok,label,noCancel){$('dlg').innerHTML='<div class="mb"><div cl
 function info(m){dlg(esc(m),null,'OK',1)}
 function nowLocal(){var d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)}
 
-function addKid(){dlg('<b>Nuovo bambino</b><input id="kn" placeholder="Nome" autocomplete="off">',function(){var n=$('kn').value.trim();if(!n)return false;var k={id:uid(),name:n};S.kids.push(k);kid=k.id;save();render()},'Aggiungi')}
+var BLOOD=['','0+','0-','A+','A-','B+','B-','AB+','AB-'];
+function bloodSel(id,v){return '<select id="'+id+'">'+BLOOD.map(function(b){return '<option value="'+b+'"'+(b==v?' selected':'')+'>'+(b||'Non indicato')+'</option>'}).join('')+'</select>'}
+function num(x){var n=parseFloat(String(x).replace(',','.'));return n>0?n:0}
+function fv(v){return String(v).replace('.',',')}
+function fd(d){return new Date(d+'T12:00').toLocaleDateString('it-IT')}
+function curKid(){return S.kids.find(function(x){return x.id==kid})}
+function addKid(){dlg('<b>Nuovo bambino</b><label>Nome</label><input id="kn" placeholder="Nome" autocomplete="off"><label>Gruppo sanguigno (facoltativo)</label>'+bloodSel('kb','')+'<div class="g2"><div><label>Peso in kg (facoltativo)</label><input id="kw" inputmode="decimal" placeholder="Es. 12,5"></div><div><label>Altezza in cm (facoltativo)</label><input id="kh" inputmode="decimal" placeholder="Es. 85"></div></div>',
+ function(){var n=$('kn').value.trim();if(!n)return false;var t=nowLocal().slice(0,10),k={id:uid(),name:n,blood:$('kb').value,weights:[],heights:[]},w=num($('kw').value),h=num($('kh').value);
+  if(w)k.weights.push({id:uid(),d:t,v:w});if(h)k.heights.push({id:uid(),d:t,v:h});S.kids.push(k);kid=k.id;save();render()},'Aggiungi')}
+function editKid(){var k=curKid();if(!k)return;
+ dlg('<b>Dati di '+esc(k.name)+'</b><label>Nome</label><input id="en" value="'+esc(k.name)+'"><label>Gruppo sanguigno (facoltativo)</label>'+bloodSel('eb',k.blood||''),
+ function(){var n=$('en').value.trim();if(!n)return false;k.name=n;k.blood=$('eb').value;save();render()},'Salva')}
+function addM(t){var lb=t=='w'?'Peso (kg)':'Altezza (cm)';
+ dlg('<b>Nuova misura</b><label>'+lb+'</label><input id="mv" inputmode="decimal" placeholder="'+(t=='w'?'Es. 12,5':'Es. 85')+'"><label>Data</label><input id="mdt" type="date" value="'+nowLocal().slice(0,10)+'">',
+ function(){var v=num($('mv').value),d=$('mdt').value;if(!v||!d)return false;var k=curKid(),key=t=='w'?'weights':'heights';k[key]=k[key]||[];k[key].push({id:uid(),d:d,v:v});save();render()},'Salva')}
+function delM(t,id){dlg('Eliminare questa misura?',function(){var k=curKid(),key=t=='w'?'weights':'heights';k[key]=(k[key]||[]).filter(function(e){return e.id!=id});save();render()},'Elimina')}
+function vProf(){var k=curKid();if(!k)return '';
+ function sec(title,key,unit,t){var a=(k[key]||[]).slice().sort(function(x,y){return x.d<y.d?1:x.d>y.d?-1:0}),h='<h2>'+title+'</h2>';
+  h+=a.length?'<div class="card"><div class="mut">Ultimo valore</div><div style="font-size:1.4rem;font-weight:700">'+fv(a[0].v)+' '+unit+'</div><div class="mut">'+fd(a[0].d)+'</div></div>':'<p class="mut">Nessun valore registrato.</p>';
+  h+='<button class="btn" onclick="addM(\''+t+'\')">Aggiungi '+(t=='w'?'peso':'altezza')+'</button>';
+  if(a.length)h+='<h2>Storico '+title.toLowerCase()+'</h2>'+a.map(function(e){return '<div class="card row" style="margin:4px 0;padding:8px 12px"><span>'+fd(e.d)+' · <b>'+fv(e.v)+' '+unit+'</b></span><button class="btn ghost sm" onclick="delM(\''+t+'\',\''+e.id+'\')">Elimina</button></div>'}).join('');
+  return h}
+ return '<div class="card"><div class="row"><b>'+esc(k.name)+'</b><button class="btn ghost sm" onclick="editKid()">Modifica</button></div><div class="mut">Gruppo sanguigno: '+(k.blood?esc(k.blood):'non indicato')+'</div></div>'+sec('Peso','weights','kg','w')+sec('Altezza','heights','cm','h')}
 function delKid(){var k=S.kids.find(function(x){return x.id==kid});if(!k)return;dlg('Eliminare '+esc(k.name)+' e tutti i suoi dati?',doDelKid,'Elimina')}
 function doDelKid(){
  var mids=S.meds.filter(function(m){return m.kid==kid}).map(function(m){return m.id});
@@ -174,10 +199,10 @@ function renderAlerts(){var h=storeOK?'':'<div class="al" role="alert"><b>Salvat
 function render(){renderAlerts();var kh='';S.kids.forEach(function(k){kh+='<button class="chip'+(k.id==kid?' on':'')+'" onclick="kid=\''+k.id+'\';render()">'+esc(k.name)+'</button>'});
  $('kids').innerHTML=kh+'<button class="chip" onclick="addKid()">+ Bambino</button>';
  if(!kid){$('tabs').innerHTML='';$('view').innerHTML='<p>Inizia aggiungendo un bambino con il pulsante «+ Bambino», oppure ripristina un backup.</p><button class="btn ghost" onclick="backup()">Backup dati</button>';return}
- var T={farmaci:'Farmaci',vaccini:'Vaccini',calendario:'Calendario'},th='';
+ var T={farmaci:'Farmaci',vaccini:'Vaccini',calendario:'Calendario',profilo:'Profilo'},th='';
  for(var k in T)th+='<button class="tab'+(k==tab?' on':'')+'" onclick="tab=\''+k+'\';render()">'+T[k]+'</button>';
  $('tabs').innerHTML=th;
- $('view').innerHTML=(tab=='farmaci'?vFarmaci():tab=='vaccini'?vVacc():vCal())+'<button class="btn ghost" onclick="backup()" style="margin-top:24px">Backup dati</button><button class="btn ghost" onclick="delKid()">Elimina questo bambino</button>'}
+ $('view').innerHTML=(tab=='farmaci'?vFarmaci():tab=='vaccini'?vVacc():tab=='profilo'?vProf():vCal())+'<button class="btn ghost" onclick="backup()" style="margin-top:24px">Backup dati</button><button class="btn ghost" onclick="delKid()">Elimina questo bambino</button>'}
 render();checkNotif();
 try{if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js')}catch(e){}
 </script>
