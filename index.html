@@ -56,7 +56,7 @@ details summary{cursor:pointer;color:var(--acc);font-weight:700;padding:6px 0}
 var S={kids:[],meds:[],logs:[],vacc:[]},kid=null,tab='farmaci';
 var storeOK=true;
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
-var SB_URL='https://viobmufmmwyevoboglts.supabase.co',SB_KEY='sb_publishable_US5vhaFMEQeK1ZGiXVS4gQ_I6M8H7eL',TBL='registro_farmaci',sb=null,remote={},syncing=false,again=false,loaded=false;
+var SB_URL='https://viobmufmmwyevoboglts.supabase.co',SB_KEY='sb_publishable_US5vhaFMEQeK1ZGiXVS4gQ_I6M8H7eL',TBL='diario_salute',sb=null,remote={},syncing=false,again=false,loaded=false;
 try{sb=window.supabase.createClient(SB_URL,SB_KEY)}catch(e){console.error(e)}
 function flat(){var o={};function add(t,x){o[t+'_'+x.id]={id:t+'_'+x.id,tipo:t,dati:x}}
  S.kids.forEach(function(x){add('bambino',x)});S.meds.forEach(function(x){add('farmaco',x)});S.logs.forEach(function(x){add('dose',x)});S.vacc.forEach(function(x){add('vaccino',x)});return o}
