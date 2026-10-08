@@ -171,7 +171,8 @@ function vcard(v){var done=!!v.done,td=nowLocal().slice(0,10);
  return '<div class="card"><b>'+esc(v.name)+'</b><div class="mut">'+(done?'Fatto il ':'Da fare il ')+fdt(v.date)+'</div>'+(v.place?'<div class="mut">Dove: '+esc(v.place)+'</div>':'')
  +(v.next?'<div class="st '+(v.next<td?'bad':'warn')+'">Richiamo: '+new Date(v.next).toLocaleDateString('it-IT')+'</div>':'')
  +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'+(done?'':'<button class="btn sm" onclick="doneV(\''+v.id+'\')">Segna come fatto</button>')
- +'<button class="btn ghost sm" onclick="editVacc(\''+v.id+'\')">Modifica</button><button class="btn ghost sm" onclick="delVacc(\''+v.id+'\')">Elimina</button></div></div>'}
+ +'<button class="btn ghost sm" onclick="editVacc(\''+v.id+'\')">Modifica</button><button class="btn ghost sm" onclick="delVacc(\''+v.id+'\')">Elimina</button></div>'
+ +(done&&!v.next?'':'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+(done?'':'<button class="btn ghost sm" onclick="gcalV(\''+v.id+'\',\'v\')">Aggiungi al Calendario</button>')+(v.next?'<button class="btn ghost sm" onclick="gcalV(\''+v.id+'\',\'r\')">Richiamo in Calendario</button>':'')+'</div>')+'</div>'}
 function vVacc(){var all=S.vacc.filter(function(v){return v.kid==kid}),
  todo=all.filter(function(v){return !v.done}).sort(function(a,b){return a.date<b.date?-1:1}),
  dn=all.filter(function(v){return v.done}).sort(function(a,b){return b.date<a.date?-1:1}),h='';
@@ -184,6 +185,13 @@ function vVacc(){var all=S.vacc.filter(function(v){return v.kid==kid}),
  h+='<h2>Storico vaccini fatti</h2>';
  h+=dn.length?dn.map(function(v){return vcard(v)}).join(''):'<p class="mut">Nessun vaccino fatto registrato.</p>';
  return h}
+function ymd(d){function z(n){return(n<10?'0':'')+n}return d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())}
+function openUrl(url){try{var a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove()}catch(e){location.href=url}}
+function gcalV(id,w){var v=S.vacc.find(function(x){return x.id==id});if(!v)return;var k=S.kids.find(function(x){return x.id==v.kid}),who=k?k.name+': ':'',dates,title,det;
+ if(w=='r'){if(!v.next)return;var d0=new Date(v.next+'T12:00'),d1=new Date(d0.getTime()+864e5);dates=ymd(d0)+'/'+ymd(d1);title=who+'Richiamo '+v.name;det='Richiamo vaccino. Controlla la data con il pediatra.'}
+ else if(v.date.length>10){var at=new Date(v.date).getTime();dates=icsT(at)+'/'+icsT(at+18e5);title=who+'Vaccino '+v.name;det='Promemoria vaccino.'+(v.place?' Dove: '+v.place+'.':'')}
+ else{var e0=new Date(v.date+'T12:00'),e1=new Date(e0.getTime()+864e5);dates=ymd(e0)+'/'+ymd(e1);title=who+'Vaccino '+v.name;det='Promemoria vaccino.'+(v.place?' Dove: '+v.place+'.':'')}
+ openUrl('https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(title)+'&dates='+dates+'&details='+encodeURIComponent(det)+(w!='r'&&v.place?'&location='+encodeURIComponent(v.place):''))}
 function doneV(id){var v=S.vacc.find(function(x){return x.id==id});if(!v)return;
  dlg('<b>Vaccino fatto: '+esc(v.name)+'</b><label>Data e ora in cui è stato fatto</label><input id="dd" type="datetime-local" value="'+nowLocal()+'">',function(){var d=$('dd').value;if(!d)return false;v.date=d;v.done=true;save();render()},'Salva nello storico')}
 function vCal(){var ev=[],mids={};S.meds.filter(function(m){return m.kid==kid}).forEach(function(m){mids[m.id]=m});
