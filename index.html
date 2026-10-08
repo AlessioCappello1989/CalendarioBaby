@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f766e">
 <link rel="icon" href="icon-192.png">
@@ -53,11 +54,37 @@ details summary{cursor:pointer;color:var(--acc);font-weight:700;padding:6px 0}
 <p class="note">Dosi e intervalli vanno presi dal foglietto illustrativo o dal pediatra: l'app non li suggerisce, ti aiuta solo a tenerne traccia. Le notifiche arrivano solo con la pagina aperta; per un promemoria preciso usa «Aggiungi al Calendario».</p>
 <script>
 var S={kids:[],meds:[],logs:[],vacc:[]},kid=null,tab='farmaci';
-try{var raw=localStorage.getItem('dsb');if(raw)S=JSON.parse(raw)}catch(e){}
-if(S.kids.length)kid=S.kids[0].id;
 var storeOK=true;
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
-function save(){try{localStorage.setItem('dsb',JSON.stringify(S));storeOK=true}catch(e){storeOK=false}}
+var SB_URL='https://viobmufmmwyevoboglts.supabase.co',SB_KEY='sb_publishable_US5vhaFMEQeK1ZGiXVS4gQ_I6M8H7eL',TBL='registro_farmaci',sb=null,remote={},syncing=false,again=false,loaded=false;
+try{sb=window.supabase.createClient(SB_URL,SB_KEY)}catch(e){console.error(e)}
+function flat(){var o={};function add(t,x){o[t+'_'+x.id]={id:t+'_'+x.id,tipo:t,dati:x}}
+ S.kids.forEach(function(x){add('bambino',x)});S.meds.forEach(function(x){add('farmaco',x)});S.logs.forEach(function(x){add('dose',x)});S.vacc.forEach(function(x){add('vaccino',x)});return o}
+function fromRows(rows){var n={kids:[],meds:[],logs:[],vacc:[]},map={bambino:'kids',farmaco:'meds',dose:'logs',vaccino:'vacc'};
+ rows.forEach(function(x){var k=map[x.tipo];if(k&&x.dati)n[k].push(x.dati)});
+ ['kids','meds','logs','vacc'].forEach(function(k){n[k].sort(function(a,b){return a.id<b.id?-1:1})});return n}
+async function load(){if(!sb){storeOK=false;render();return}
+ try{var res=await sb.from(TBL).select('id,tipo,dati');if(res.error)throw res.error;
+  remote={};res.data.forEach(function(x){remote[x.id]=JSON.stringify(x.dati)});S=fromRows(res.data);
+  var pend=null;try{pend=JSON.parse(localStorage.getItem('dsb_pending'))}catch(e){}
+  if(pend&&pend.kids){S=pend}
+  else if(!res.data.length){try{var old=JSON.parse(localStorage.getItem('dsb'));if(old&&old.kids&&old.kids.length)S=old}catch(e){}}
+  loaded=true;storeOK=true;if(!S.kids.find(function(k){return k.id==kid}))kid=S.kids.length?S.kids[0].id:null}
+ catch(e){storeOK=false;console.error(e)}
+ render();if(loaded){checkNotif();syncNow()}}
+function save(){try{localStorage.setItem('dsb_pending',JSON.stringify(S))}catch(e){}syncNow()}
+async function syncNow(){if(!sb||!loaded)return;if(syncing){again=true;return}syncing=true;
+ try{var cur=flat(),up=[],del=[],id;
+  for(id in cur){var js=JSON.stringify(cur[id].dati);if(remote[id]!==js)up.push({r:cur[id],js:js})}
+  for(id in remote){if(!cur[id])del.push(id)}
+  if(up.length){var e1=(await sb.from(TBL).upsert(up.map(function(u){return u.r}),{onConflict:'id'})).error;if(e1)throw e1;up.forEach(function(u){remote[u.r.id]=u.js})}
+  if(del.length){var e2=(await sb.from(TBL).delete().in('id',del)).error;if(e2)throw e2;del.forEach(function(i){delete remote[i]})}
+  storeOK=true;if(!again){try{localStorage.removeItem('dsb_pending')}catch(e){}}}
+ catch(e){storeOK=false;console.error(e)}
+ syncing=false;renderAlerts();if(again){again=false;syncNow()}}
+setInterval(function(){if(!loaded)load();else if(!storeOK&&!syncing)syncNow()},20000);
+window.addEventListener('online',function(){if(!loaded)load();else syncNow()});
+document.addEventListener('visibilitychange',function(){if(document.visibilityState=='visible'&&loaded&&storeOK&&!syncing&&!$('dlg').innerHTML)load()});
 function backup(){var j=JSON.stringify(S);
  dlg('<b>Backup dati</b><p class="mut">Copia questo testo e conservalo (ad esempio nelle note). Per ripristinare, incollalo qui sotto e premi «Ripristina».</p><textarea id="bk" rows="6" style="width:100%;font-size:.75rem;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);padding:8px">'+esc(j)+'</textarea><button class="btn ghost" onclick="var t=$(\'bk\');t.select();try{navigator.clipboard.writeText(t.value)}catch(e){try{document.execCommand(\'copy\')}catch(x){}}this.textContent=\'Copiato\'">Copia testo</button>',
  function(){try{var d=JSON.parse($('bk').value);if(!d||!d.kids||!d.meds||!d.logs||!d.vacc)throw 0;S=d;kid=S.kids.length?S.kids[0].id:null;save();render()}catch(e){info('Testo di backup non valido.');return false}},'Ripristina')}
@@ -170,15 +197,16 @@ function vCal(){var ev=[],mids={};S.meds.filter(function(m){return m.kid==kid}).
  var td=ev.filter(function(e){return e.todo}).sort(function(a,b){return a.t-b.t}),dn=ev.filter(function(e){return !e.todo}).sort(function(a,b){return b.t-a.t});
  function grp(list){var h='',last='';list.forEach(function(e){var d=dayKey(e.t);if(d!=last){h+='<div class="day">'+d+'</div>';last=d}h+='<div class="card" style="margin:4px 0;padding:8px 12px">'+e.txt+'</div>'});return h}
  return '<h2 class="sec">Da fare</h2>'+(td.length?grp(td):'<p class="mut">Nessun vaccino da fare.</p>')+'<h2 class="sec">Fatti</h2>'+(dn.length?grp(dn):'<p class="mut">Ancora nulla di registrato.</p>')}
-function renderAlerts(){var h=storeOK?'':'<div class="al" role="alert"><b>Salvataggio non disponibile</b>Il browser non permette di salvare i dati: usa «Backup dati» per non perderli.</div>';dueList().forEach(function(d){h+='<div class="al" role="alert"><b>'+esc(d.m.name)+' per '+esc(d.k?d.k.name:'')+'</b>Sono passate '+d.m.hours+' h dall\'ultima dose ('+hm(d.l.t)+'). Si può dare la prossima dose'+(d.m.dose?' ('+esc(d.m.dose)+')':'')+', se serve.<div class="g2"><button onclick="give(\''+d.m.id+'\')">Dato adesso</button><button onclick="ack(\''+d.l.id+'\')">Ok, non serve</button></div></div>'});$('alerts').innerHTML=h}
-function render(){renderAlerts();var kh='';S.kids.forEach(function(k){kh+='<button class="chip'+(k.id==kid?' on':'')+'" onclick="kid=\''+k.id+'\';render()">'+esc(k.name)+'</button>'});
+function renderAlerts(){var h=storeOK?'':'<div class="al" role="alert"><b>Sincronizzazione non riuscita</b>Controlla la connessione: riprovo in automatico. Le modifiche restano salvate sul telefono nel frattempo.</div>';dueList().forEach(function(d){h+='<div class="al" role="alert"><b>'+esc(d.m.name)+' per '+esc(d.k?d.k.name:'')+'</b>Sono passate '+d.m.hours+' h dall\'ultima dose ('+hm(d.l.t)+'). Si può dare la prossima dose'+(d.m.dose?' ('+esc(d.m.dose)+')':'')+', se serve.<div class="g2"><button onclick="give(\''+d.m.id+'\')">Dato adesso</button><button onclick="ack(\''+d.l.id+'\')">Ok, non serve</button></div></div>'});$('alerts').innerHTML=h}
+function render(){renderAlerts();
+ if(!loaded){$('kids').innerHTML='';$('tabs').innerHTML='';$('view').innerHTML='<p class="mut">'+(storeOK?'Caricamento…':'Impossibile caricare i dati dal database. Riprovo in automatico.')+'</p><button class="btn ghost" onclick="load()">Riprova ora</button>';return}var kh='';S.kids.forEach(function(k){kh+='<button class="chip'+(k.id==kid?' on':'')+'" onclick="kid=\''+k.id+'\';render()">'+esc(k.name)+'</button>'});
  $('kids').innerHTML=kh+'<button class="chip" onclick="addKid()">+ Bambino</button>';
  if(!kid){$('tabs').innerHTML='';$('view').innerHTML='<p>Inizia aggiungendo un bambino con il pulsante «+ Bambino», oppure ripristina un backup.</p><button class="btn ghost" onclick="backup()">Backup dati</button>';return}
  var T={farmaci:'Farmaci',vaccini:'Vaccini',calendario:'Calendario'},th='';
  for(var k in T)th+='<button class="tab'+(k==tab?' on':'')+'" onclick="tab=\''+k+'\';render()">'+T[k]+'</button>';
  $('tabs').innerHTML=th;
  $('view').innerHTML=(tab=='farmaci'?vFarmaci():tab=='vaccini'?vVacc():vCal())+'<button class="btn ghost" onclick="backup()" style="margin-top:24px">Backup dati</button><button class="btn ghost" onclick="delKid()">Elimina questo bambino</button>'}
-render();checkNotif();
+render();load();
 try{if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js')}catch(e){}
 </script>
 </body>
